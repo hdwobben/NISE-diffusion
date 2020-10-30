@@ -4,7 +4,8 @@ include(FetchContent)
 # eigen dependency
 #---------------------------------------------------------------------------------------
 
-#find_package (Eigen3 CONFIG)
+#find_package (Eigen3 CONFIG QUIET)
+
 if(NOT TARGET Eigen3::Eigen)
     FetchContent_Declare(
         eigen
@@ -18,4 +19,21 @@ if(NOT TARGET Eigen3::Eigen)
         add_subdirectory(${eigen_SOURCE_DIR} ${eigen_BINARY_DIR} EXCLUDE_FROM_ALL)
     endif()
     add_library(Eigen3::Eigen ALIAS eigen)
+endif()
+
+#---------------------------------------------------------------------------------------
+# json dependency
+#---------------------------------------------------------------------------------------
+
+find_package(nlohmann_json QUIET)
+
+if(NOT TARGET nlohmann_json::nlohmann_json)
+    FetchContent_Declare(json
+        GIT_REPOSITORY https://github.com/ArthurSonzogni/nlohmann_json_cmake_fetchcontent
+        GIT_TAG v3.9.1)
+
+    FetchContent_GetProperties(json)
+    if(NOT json_POPULATED)
+        FetchContent_Populate(json)
+    endif()
 endif()

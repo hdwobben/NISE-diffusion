@@ -45,9 +45,15 @@ set(NISE_SRCS
 
 add_executable(nise_diff ${NISE_SRCS})
 
-target_include_directories(nise_diff PUBLIC "${CMAKE_CURRENT_LIST_DIR}/include")
-        
 include(dependencies/dependencies.cmake)
+
+target_include_directories(nise_diff PUBLIC 
+
+    ${CMAKE_CURRENT_LIST_DIR}/include
+    ${json_SOURCE_DIR}/include)
+
+#Message(STATUS "Json source dir is ${json_SOURCE_DIR}")
+        
 
 find_package(Threads REQUIRED) 
 target_link_libraries(nise_diff PUBLIC Eigen3::Eigen Threads::Threads)

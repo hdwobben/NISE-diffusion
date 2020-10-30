@@ -18,4 +18,7 @@ void print_progress(std::ostream &os, int iter, int total,
                     std::string const &suffix = "",
                     int decimals = 1, int barLength = 40);
 
+// get the current local timestamp as string
+std::string nowStrLocal(std::string const &fmt = "%Y-%m-%d %H:%M:%S");
+
 #endif // NISE_UTILS_H
