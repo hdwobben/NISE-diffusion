@@ -1,0 +1,8 @@
+/*
+/*/
+!/cmake/
+!/dependencies/
+!/include/
+!/src/
+!/CMakeLists.txt
+!/.gitignore
