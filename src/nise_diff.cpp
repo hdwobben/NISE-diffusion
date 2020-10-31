@@ -6,7 +6,6 @@
 #include <cstring>
 #include <getopt.h>
 #include <nlohmann/json.hpp>
-#include <unsupported/Eigen/MatrixFunctions>
 #include <Eigen/Dense>
 #include <NISE/random.hpp>
 #include <NISE/utils.hpp>
@@ -86,7 +85,7 @@ CmdArgs processCmdArguments(int argc, char *argv[])
             std::cin >> cargs.paramsFName;
         }
     }
-
+    
     return cargs;
 }
 
@@ -151,6 +150,7 @@ ArrayXd evolve(RandomGenerator rnd, MatrixXd &H0, MatrixXd &Hf0,
     MatrixXd Hf = Hf0;
     VectorXcd c = c0;
     ArrayXd msdi{p.nTimeSteps};
+    Eigen::SelfAdjointEigenSolver<MatrixXd> solver(p.N);
 
     for (int ti = 0; ti < p.nTimeSteps; ++ti)
     {
@@ -158,7 +158,11 @@ ArrayXd evolve(RandomGenerator rnd, MatrixXd &H0, MatrixXd &Hf0,
         msdi[ti] = xxsq * c.cwiseAbs2();
         updateTrajectory(Hf, rnd, p);
         H = H0 + Hf;
-        c = (-1i * H * p.dt).exp() * c; // hbar = 1
+        solver.computeFromTridiagonal(H.diagonal(), H.diagonal(-1) );
+        VectorXcd L = 
+            (solver.eigenvalues().array() * -1i * p.dt).exp();
+        MatrixXd const &U = solver.eigenvectors();
+        c = U * L.asDiagonal() * U.transpose() * c; // hbar = 1
     }
     return msdi;
 }
