@@ -74,7 +74,9 @@ set(TEST_SRCS
 
 add_executable(test ${TEST_SRCS})
 
-target_include_directories(test PUBLIC "${CMAKE_CURRENT_LIST_DIR}/include")
+target_include_directories(test PUBLIC 
+    "${CMAKE_CURRENT_LIST_DIR}/include"
+    ${json_SOURCE_DIR}/include)
 target_link_libraries(test PUBLIC Eigen3::Eigen Threads::Threads)
 _enable_warnings(test)
 set_target_properties(test PROPERTIES DEBUG_POSTFIX d)
