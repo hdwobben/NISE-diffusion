@@ -24,16 +24,18 @@ using DiagonalMatrixXcd =
 using json = nlohmann::json;
 using namespace std::complex_literals;
 
+// hbar / (hc * 100 cm/m) * 1e15 fs/s [cm^-1 fs]
+const double hbar_cm1_fs = 1 / (2 * M_PI * 299792458.0 * 100) * 1e15;
+
 struct Params
 {
-    double R = 1;                       // Inter chain distance in nm
-    int N = 51;                         // Chain length
-    double J = 5.650954701926560e-03;   // Coupling constant
-    double sig = 2 * J;                 // Stddev of energy fluctuations
-    double lam = 0.002;                 // 1/T in fs^-1
-    double dt = 1;                      // time step in fs
-    int nTimeSteps = 600;               // final time = nTimeSteps * dt
-    int nRuns = 100;                    // number of runs to average over
+    int N = 51;                 // Chain length
+    double J = 30;              // Coupling constant [cm^-1]
+    double sig = 2 * J;         // Stddev of energy fluctuations [cm^-1]
+    double lam = 0.002;         // Interaction rate 1/T [fs^-1]
+    double dt = 1;              // Time step [fs]
+    int nTimeSteps = 600;       // Final time = nTimeSteps * dt
+    int nRuns = 100;            // Number of runs to average over
 };
 
 struct CmdArgs
@@ -105,7 +107,6 @@ Params loadParams(std::string const &fname)
         
         prms.N = pdata["N"];
         prms.J = pdata["J"];
-        prms.R = pdata["R"];
         prms.lam = pdata["lam"];
         prms.sig = pdata["sig/J"].get<double>() * prms.J;
         prms.nRuns = pdata["nRuns"];
@@ -121,13 +122,12 @@ Params loadParams(std::string const &fname)
 std::ostream &operator<<(std::ostream &os, Params const &p)
 {
     os << "N = " << p.N << '\n'
-       << "J = " << p.J << '\n'
-       << "R = " << p.R << '\n'
-       << "lam = " << p.lam << '\n'
-       << "sig = " << p.sig << '\n'
+       << "J = " << p.J << " cm^-1\n"
+       << "lam = " << p.lam << " fs^-1\n"
+       << "sig = " << p.sig << " cm^-1\n"
        << "nRuns = " << p.nRuns << '\n'
        << "nTimeSteps = " << p.nTimeSteps << '\n'
-       << "dt = " << p.dt;
+       << "dt = " << p.dt << " cm^-1";
     return os;
 }
 
@@ -143,8 +143,8 @@ void updateTrajectory(MatrixXd &Hf, RandomGenerator &rnd, Params const &p)
     Hf.diagonal().array() += r;
 }
 
-ArrayXd evolve(RandomGenerator rnd, MatrixXd &H0, MatrixXd &Hf0,
-               VectorXcd &c0, RowVectorXd &xxsq, Params const &p)
+ArrayXd evolve(RandomGenerator rnd, MatrixXd const &H0, MatrixXd const &Hf0,
+               VectorXcd const &c0, RowVectorXd const &xxsq, Params const &p)
 {
     MatrixXd H;
     MatrixXd Hf = Hf0;
@@ -160,9 +160,9 @@ ArrayXd evolve(RandomGenerator rnd, MatrixXd &H0, MatrixXd &Hf0,
         H = H0 + Hf;
         solver.computeFromTridiagonal(H.diagonal(), H.diagonal(-1) );
         VectorXcd L = 
-            (solver.eigenvalues().array() * -1i * p.dt).exp();
+            (solver.eigenvalues().array() * -1i * p.dt / hbar_cm1_fs).exp();
         MatrixXd const &U = solver.eigenvectors();
-        c = U * L.asDiagonal() * U.transpose() * c; // hbar = 1
+        c = U * L.asDiagonal() * U.transpose() * c;
     }
     return msdi;
 }
@@ -174,23 +174,23 @@ int main(int argc, char *argv[])
     if (not cmdargs.quiet)
         std::cout << p << '\n';
 
-    // Constant part of the Hamiltonian (site basis)
+    // Constant part of the Hamiltonian (site basis) in cm^-1
     MatrixXd H0 = MatrixXd::Zero(p.N, p.N);
     H0.diagonal(1) = VectorXd::Constant(p.N - 1, p.J);
     H0.diagonal(-1) = VectorXd::Constant(p.N - 1, p.J);
 
-    // Fluctuating part of the Hamiltonian (site basis)
+    // Fluctuating part of the Hamiltonian (site basis) in cm^-1
     MatrixXd Hf0 = MatrixXd::Zero(p.N, p.N);
     
     VectorXcd c0 = VectorXcd::Zero(p.N);
-    c0[p.N / 2] = 1; // c(0), a single excitation in the middle of the chain
+    c0[p.N / 2] = 1; // single excitation in the middle of the chain
 
-    double x0 = ((p.N + 1) / 2) * p.R; // middle of the chain
+    double x0 = ((p.N + 1) / 2); // middle of the chain in units of R
     
-    // The diagonals of the matrix form of the operator (x - x0)^2
+    // Diagonals of the matrix form of the operator (x - x0)^2 in units of R^2
     RowVectorXd xxsq = 
-        ArrayXd::LinSpaced(p.N, 1, p.N).square() * (p.R * p.R) - 
-        ArrayXd::LinSpaced(p.N, 1, p.N) * 2 * p.R * x0 + (x0 * x0);
+        ArrayXd::LinSpaced(p.N, 1, p.N).square() - 
+        ArrayXd::LinSpaced(p.N, 1, p.N) * 2 * x0 + (x0 * x0);
        
     ThreadPool pool(std::thread::hardware_concurrency());
     
@@ -209,7 +209,7 @@ int main(int argc, char *argv[])
         seed2 = (seed2 + 1) % 30081;
     }
 
-    // average of mean squared displacement <<(x(t) - x0)^2>>
+    // <<(x(t) - x0)^2>> in units of R^2
     ArrayXd msd = ArrayXd::Zero(p.nTimeSteps);
 
     for (int run = 0; run < p.nRuns; ++run)
@@ -237,7 +237,6 @@ int main(int argc, char *argv[])
     json dataset;    
     dataset["N"] = p.N;
     dataset["J"] = p.J;
-    dataset["R"] = p.R;
     dataset["lam"] = p.lam;
     dataset["sig"] = p.sig;
     dataset["nRuns"] = p.nRuns;
