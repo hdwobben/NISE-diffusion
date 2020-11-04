@@ -7,7 +7,7 @@
 #include <NISE/random.hpp>
 #include <NISE/utils.hpp>
 #include <NISE/threadpool.hpp>
-
+ 
 using Eigen::MatrixXd;
 using Eigen::MatrixXcd;
 using Eigen::VectorXcd;
@@ -15,6 +15,7 @@ using Eigen::VectorXd;
 using Eigen::RowVectorXd;
 using Eigen::RowVectorXcd;
 using Eigen::ArrayXd;
+using Eigen::ArrayXcd;
 using DiagonalMatrixXcd = 
     Eigen::DiagonalMatrix<Eigen::dcomplex, Eigen::Dynamic>;
 
@@ -33,32 +34,32 @@ void updateTrajectory(VectorXd &Hf, RandomGenerator &rnd, Params const &p)
         Hf[i] += A * rnd.RandomGaussian(0, p.sig);
 }
 
-ArrayXd evolve(RandomGenerator rnd, MatrixXd const &H0, VectorXcd const &c0, 
-               RowVectorXd const &xxsq, Params const &p)
+ArrayXcd evolve(RandomGenerator rnd, MatrixXd const &H0, MatrixXcd const &j0,
+                Params const &p)
 {
     MatrixXd H = H0;
-    VectorXcd c = c0;
-    VectorXd Hf = VectorXd::Zero(p.N, p.N);
+    MatrixXcd jt = j0;
+    VectorXd Hf = VectorXd::Zero(p.N);
     for (int i = 0; i < p.N; ++i) // Prepare the starting disorder
-        Hf[i] = rnd.RandomGaussian(0, p.sig);
+        Hf[i] = rnd.RandomGaussian(0, p.sig); 
     H.diagonal() = Hf;
 
-    ArrayXd msdi{p.nTimeSteps}; // <(x(t) - x0)^2> in units of R^2
+    ArrayXcd integrand{p.nTimeSteps}; // Tr(j(u,t)j(u)) in units of R^2 [fs^-2]
     Eigen::SelfAdjointEigenSolver<MatrixXd> solver(p.N);
 
     for (int ti = 0; ti < p.nTimeSteps; ++ti)
     {
-        // < (x(t) - x(0))^2 > (expectation value)
-        msdi[ti] = xxsq * c.cwiseAbs2();
+        integrand[ti] = (jt * j0).trace();
         solver.computeFromTridiagonal(H.diagonal(), H.diagonal(-1) );
         VectorXcd L = 
             (solver.eigenvalues().array() * -1i * p.dt / hbar_cm1_fs).exp();
         MatrixXd const &V = solver.eigenvectors();
-        c = V * L.asDiagonal() * V.adjoint() * c;
+        MatrixXcd U = V * L.asDiagonal() * V.adjoint();
+        jt = U.adjoint() * jt * U;
         updateTrajectory(Hf, rnd, p);
         H.diagonal() = Hf;
     }
-    return msdi;
+    return integrand;
 }
 
 int main(int argc, char *argv[])
@@ -73,19 +74,22 @@ int main(int argc, char *argv[])
     H0.diagonal(1) = VectorXd::Constant(p.N - 1, p.J);
     H0.diagonal(-1) = VectorXd::Constant(p.N - 1, p.J);
 
-    VectorXcd c0 = VectorXcd::Zero(p.N);
-    c0[p.N / 2] = 1; // single excitation in the middle of the chain
+    // Flux operator j(u) (site basis) in units of R [fs^-1]
+    MatrixXcd j0 = MatrixXcd::Zero(p.N, p.N);
+    j0.diagonal(1) = VectorXcd::Constant(p.N - 1, 1i * p.J / hbar_cm1_fs);
+    j0.diagonal(-1) = VectorXcd::Constant(p.N - 1, -1i * p.J / hbar_cm1_fs);
+         
+    unsigned long nThreads;
+    char *penv;
 
-    double x0 = ((p.N + 1) / 2); // middle of the chain in units of R
+    if ((penv = std::getenv("SLURM_JOB_CPUS_ON_NODE") ) )
+        nThreads = std::stoul(penv);
+    else
+        nThreads = std::thread::hardware_concurrency();
+
+    ThreadPool pool(nThreads);
     
-    // Diagonals of the matrix form of the operator (x - x0)^2 in units of R^2
-    RowVectorXd xxsq = 
-        ArrayXd::LinSpaced(p.N, 1, p.N).square() - 
-        ArrayXd::LinSpaced(p.N, 1, p.N) * 2 * x0 + (x0 * x0);
-       
-    ThreadPool pool(std::thread::hardware_concurrency());
-    
-    std::vector<std::future<ArrayXd>> results;
+    std::vector<std::future<ArrayXcd>> results;
     results.reserve(p.nRuns);
 
     auto s = seedsFromClock(); // base seeds for random numbers
@@ -96,32 +100,32 @@ int main(int argc, char *argv[])
     {
         RandomGenerator rnd(seed1, seed2); // every thread gets its own seed
         results.push_back(
-            pool.enqueue(evolve, rnd, H0, c0, xxsq, p));
+            pool.enqueue(evolve, rnd, H0, j0, p));
         seed2 = (seed2 + 1) % 30081;
     }
 
-    // <<(x(t) - x0)^2>> in units of R^2
-    ArrayXd msd = ArrayXd::Zero(p.nTimeSteps);
+    // <Tr(j(u,t)j(u))> in units of R^2 [fs^-2]
+    ArrayXcd integrand = ArrayXcd::Zero(p.nTimeSteps);
 
     if (not cmdargs.quiet)
         print_progress(std::cout, 0, p.nRuns, "", "", 1, 20);
 
     for (int run = 0; run < p.nRuns; ++run)
     {
-        msd += results[run].get();
+        integrand += results[run].get();
         if (not cmdargs.quiet)
             print_progress(std::cout, run + 1, p.nRuns, "", "", 1, 20);
     }
-    msd /= p.nRuns;
+    integrand /= p.nRuns;
 
     if (not cmdargs.outFile)
         return 0;
 
     if (cmdargs.outFName.empty() )
-        cmdargs.outFName = nowStrLocal("%Y%m%d%H%M%S.msd");
+        cmdargs.outFName = nowStrLocal("%Y%m%d%H%M%S.kuboint");
     
     if (cmdargs.outFName != "out.tmp")
         std::cout << cmdargs.outFName << '\n';
 
-    saveData(cmdargs.outFName, msd.data(), msd.size(), p);
+    saveData(cmdargs.outFName, integrand.data(), integrand.size(), p);    
 }

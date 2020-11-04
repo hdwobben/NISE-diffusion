@@ -37,44 +37,79 @@ endif()
 #---------------------------------------------------------------------------------------
 # Build programs
 #---------------------------------------------------------------------------------------
-set(NISE_SRCS
-    
+
+include(dependencies/dependencies.cmake)
+find_package(Threads REQUIRED) 
+
+#-----------------------
+# nise_diff
+#-----------------------
+add_executable(nise_diff 
+
     src/nise_diff.cpp
     src/random.cpp
     src/utils.cpp)
-
-add_executable(nise_diff ${NISE_SRCS})
-
-include(dependencies/dependencies.cmake)
 
 target_include_directories(nise_diff PUBLIC 
 
     ${CMAKE_CURRENT_LIST_DIR}/include
     ${json_SOURCE_DIR}/include)
 
-#Message(STATUS "Json source dir is ${json_SOURCE_DIR}")
-        
-
-find_package(Threads REQUIRED) 
 target_link_libraries(nise_diff PUBLIC Eigen3::Eigen Threads::Threads)
-
 _enable_warnings(nise_diff)
-
 set_target_properties(nise_diff PROPERTIES DEBUG_POSTFIX d)
+
+#-----------------------
+# kubo_diff_int
+#-----------------------
+add_executable(kubo_diff_int 
+
+    src/kubo_diff_int.cpp
+    src/random.cpp
+    src/utils.cpp)
+
+target_include_directories(kubo_diff_int PUBLIC 
+
+    ${CMAKE_CURRENT_LIST_DIR}/include
+    ${json_SOURCE_DIR}/include)
+
+target_link_libraries(kubo_diff_int PUBLIC Eigen3::Eigen Threads::Threads)
+_enable_warnings(kubo_diff_int)
+set_target_properties(kubo_diff_int PROPERTIES DEBUG_POSTFIX d)
+
+#-----------------------
+# kubo_diff
+#-----------------------
+add_executable(kubo_diff
+
+    src/kubo_diff.cpp
+    src/random.cpp
+    src/utils.cpp)
+
+target_include_directories(kubo_diff PUBLIC 
+
+    ${CMAKE_CURRENT_LIST_DIR}/include
+    ${json_SOURCE_DIR}/include)
+
+target_link_libraries(kubo_diff PUBLIC Eigen3::Eigen Threads::Threads)
+_enable_warnings(kubo_diff)
+set_target_properties(kubo_diff PROPERTIES DEBUG_POSTFIX d)
 
 #---------------------------------------------------------------------------------------
 # Testing
 #---------------------------------------------------------------------------------------
 
-set(TEST_SRCS
-    
+add_executable(test 
+
     src/test.cpp
     src/random.cpp
     src/utils.cpp)
 
-add_executable(test ${TEST_SRCS})
+target_include_directories(test PUBLIC 
+    
+    ${CMAKE_CURRENT_LIST_DIR}/include
+    ${json_SOURCE_DIR}/include)
 
-target_include_directories(test PUBLIC "${CMAKE_CURRENT_LIST_DIR}/include")
 target_link_libraries(test PUBLIC Eigen3::Eigen Threads::Threads)
 _enable_warnings(test)
 set_target_properties(test PROPERTIES DEBUG_POSTFIX d)

@@ -6,3 +6,10 @@
 !/src/
 !/CMakeLists.txt
 !/.gitignore
+!/run_plot_nise.sh
+!/plot_msd.py
+!/run_diffuse.sh
+!/calc_diffusion.py
+!/run_plot_kubo_int.sh
+!/plot_integrand.py
+!/params.json

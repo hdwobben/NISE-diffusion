@@ -51,7 +51,7 @@ bool allClose(MatrixXcd const &A, MatrixXcd const &B, double eps = 1e-15)
 int main()
 {
     double R = 1; // Inter chain distance in nm
-    int N = 31; // Chain length
+    int N = 5; // Chain length
     // Coupling constant in units of hbar = 1 (fs^-1)
     double J = 5.650954701926560e-03; // = 30 cm^-1 * hc / hbar
     double sig = 2 * J;
@@ -68,26 +68,33 @@ int main()
     auto s = seedsFromClock();
     int s1 = s.first;
     int s2 = s.second;
-    for (int run = 0; run < 100; ++run)
+    //for (int run = 0; run < 100; ++run)
     {   
         RandomGenerator rnd(s1, s2);
         Eigen::SelfAdjointEigenSolver<MatrixXd> solver(H0.cols());
-        for (int i = 0; i < 500; ++i)
+        // for (int i = 0; i < 500; ++i)
         {
             updateHf(Hf, rnd, dt, lam, sig);
             MatrixXd H = H0 + Hf;    
             solver.computeFromTridiagonal(H.diagonal(), H.diagonal(-1) );
             VectorXcd L = 
                 (solver.eigenvalues().array() * -1i * dt).exp();
+            //VectorXd const &L = solver.eigenvalues();
             MatrixXd const &U = solver.eigenvectors();
-            MatrixXcd ex1 = U * L.asDiagonal() * U.transpose();
-            // std::cout << U * U.transpose() << "\n\n\n";
-            MatrixXcd ex2 = (-1i * H * dt).exp();
-            if (not allClose(ex1, ex2, 1e-13) )
-            {
-                std::cout << s1 << ' ' << s2 << ' ' << run << ' ' << i << '\n' << (ex1 - ex2).cwiseAbs() << '\n';
-                return 0;
-            }
+            MatrixXcd Ev = U * L.asDiagonal() * U.adjoint();
+            MatrixXcd Evd = Ev.adjoint();
+            MatrixXcd Evdd = U * L.conjugate().asDiagonal() * U.adjoint();
+            std::cout << U * U.adjoint() << "\n\n\n";
+            std::cout << Ev << "\n\n\n";
+            std::cout << Evd << "\n\n\n";
+            std::cout << Evdd << "\n\n\n";
+            std::cout << allClose(Evd, Evdd) << '\n';
+            //MatrixXcd ex2 = (-1i * H * dt).exp();
+            // if (not allClose(H, Hr, 1e-13) )
+            // {
+            //     std::cout << s1 << ' ' << s2 << ' ' << run << ' ' << i << '\n' << (H - Hr).cwiseAbs() << '\n';
+            //     return 0;
+            // }
             // c = U * L * U.transpose() * c;
         }
         s2 = (s2 + 1) % 30081;
