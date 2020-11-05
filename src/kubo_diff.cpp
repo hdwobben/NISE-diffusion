@@ -6,7 +6,7 @@
 #include <Eigen/Dense>
 #include <NISE/random.hpp>
 #include <NISE/utils.hpp>
-#include <NISE/threadpool/pool.hpp>
+#include <NISE/threading/threadpool.hpp>
  
 using Eigen::MatrixXd;
 using Eigen::MatrixXcd;
@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
     else
         nThreads = std::thread::hardware_concurrency();
 
-    thread_pool pool(nThreads);
+    ThreadPool pool(nThreads);
     
     std::vector<std::future<ArrayXcd>> results;
     results.reserve(p.nRuns);

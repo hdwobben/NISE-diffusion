@@ -1,5 +1,5 @@
-#ifndef NISE_POOL_QUEUE_H
-#define NISE_POOL_QUEUE_H
+#ifndef NISE_THREADING_QUEUE_H
+#define NISE_THREADING_QUEUE_H
 
 #include <mutex>
 #include <queue>
@@ -773,4 +773,4 @@ private:
 	semaphore m_fullSlots;
 };
 
-#endif // NISE_POOL_QUEUE_H
+#endif // NISE_THREADING_QUEUE_H

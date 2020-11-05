@@ -1,5 +1,5 @@
-#ifndef NISE_POOL_POOL_H
-#define NISE_POOL_POOL_H
+#ifndef NISE_THREADING_THREADPOOL_H
+#define NISE_THREADING_THREADPOOL_H
 
 #include <tuple>
 #include <atomic>
@@ -13,10 +13,10 @@
 #include <type_traits>
 #include "queue.hpp"
 
-class simple_thread_pool
+class SimpleThreadPool
 {
 public:
-	explicit simple_thread_pool(size_t threads = std::thread::hardware_concurrency())
+	explicit SimpleThreadPool(size_t threads = std::thread::hardware_concurrency())
 	{
 		if(!threads)
 			throw std::invalid_argument("Invalid thread count!");
@@ -36,7 +36,7 @@ public:
 			m_threads.emplace_back(worker);
 	}
 
-	~simple_thread_pool()
+	~SimpleThreadPool()
 	{
 		m_queue.done();
 		for(auto& thread : m_threads)
@@ -72,10 +72,10 @@ private:
 	Threads m_threads;
 };
 
-class thread_pool
+class ThreadPool
 {
 public:
-	explicit thread_pool(size_t threads = std::thread::hardware_concurrency())
+	explicit ThreadPool(size_t threads = std::thread::hardware_concurrency())
 	: m_queues(threads), m_count(threads)
 	{
 		if(!threads)
@@ -99,7 +99,7 @@ public:
 			m_threads.emplace_back(worker, i);
 	}
 
-	~thread_pool()
+	~ThreadPool()
 	{
 		for(auto& queue : m_queues)
 			queue.done();
@@ -155,4 +155,4 @@ private:
 	inline static const unsigned int K = 2;
 };
 
-#endif // NISE_POOL_POOL_H
+#endif // NISE_THREADING_THREADPOOL_H

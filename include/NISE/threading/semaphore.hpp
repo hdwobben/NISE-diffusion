@@ -1,5 +1,5 @@
-#ifndef NISE_POOL_SEMAPHORE_H
-#define NISE_POOL_SEMAPHORE_H
+#ifndef NISE_THREADING_SEMAPHORE_H
+#define NISE_THREADING_SEMAPHORE_H
 
 /*
  * fast_semaphore designed by Joe Seigh, implemented by Chris Thomasson
@@ -94,4 +94,4 @@ private:
 	semaphore m_semaphore;
 };
 
-#endif // NISE_POOL_SEMAPHORE_H
+#endif // NISE_THREADING_SEMAPHORE_H
