@@ -78,22 +78,40 @@ _enable_warnings(kubo_diff_int)
 set_target_properties(kubo_diff_int PROPERTIES DEBUG_POSTFIX d)
 
 #-----------------------
-# kubo_diff
+# cao_diff
 #-----------------------
-add_executable(kubo_diff
+add_executable(cao_diff
 
-    src/kubo_diff.cpp
+    src/cao_diff.cpp
     src/random.cpp
     src/utils.cpp)
 
-target_include_directories(kubo_diff PUBLIC 
+target_include_directories(cao_diff PUBLIC 
 
     ${CMAKE_CURRENT_LIST_DIR}/include
     ${json_SOURCE_DIR}/include)
 
-target_link_libraries(kubo_diff PUBLIC Eigen3::Eigen Threads::Threads)
-_enable_warnings(kubo_diff)
-set_target_properties(kubo_diff PROPERTIES DEBUG_POSTFIX d)
+target_link_libraries(cao_diff PUBLIC Eigen3::Eigen Threads::Threads)
+_enable_warnings(cao_diff)
+set_target_properties(cao_diff PROPERTIES DEBUG_POSTFIX d)
+
+#-----------------------
+# eff_gamma
+#-----------------------
+add_executable(eff_gamma
+
+    src/eff_gamma.cpp
+    src/random.cpp
+    src/utils.cpp)
+
+target_include_directories(eff_gamma PUBLIC 
+
+    ${CMAKE_CURRENT_LIST_DIR}/include
+    ${json_SOURCE_DIR}/include)
+
+target_link_libraries(eff_gamma PUBLIC Eigen3::Eigen Threads::Threads)
+_enable_warnings(eff_gamma)
+set_target_properties(eff_gamma PROPERTIES DEBUG_POSTFIX d)
 
 #---------------------------------------------------------------------------------------
 # Testing
