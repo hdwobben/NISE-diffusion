@@ -12,4 +12,6 @@
 !/calc_diffusion.py
 !/run_plot_kubo_int.sh
 !/plot_integrand.py
-!/params.json
+!/params_template.json
+!/TODO.md
+!/README.md

@@ -49,7 +49,7 @@ ArrayXcd evolve(RandomGenerator rnd, MatrixXd const &H0, MatrixXcd const &j0,
 
     for (int ti = 0; ti < p.nTimeSteps; ++ti)
     {
-        integrand[ti] = (jt * j0).trace();
+        integrand[ti] = (jt * j0).trace(); // jt.cwiseProduct(j0).sum();
         solver.computeFromTridiagonal(H.diagonal(), H.diagonal(-1) );
         VectorXcd L = 
             (solver.eigenvalues().array() * -1i * p.dt / hbar_cm1_fs).exp();

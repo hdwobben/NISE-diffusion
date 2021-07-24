@@ -23,6 +23,62 @@ using namespace std::complex_literals;
 // hbar / (hc * 100 cm/m) * 1e15 fs/s [cm^-1 fs]
 const double hbar_cm1_fs = 1 / (2 * M_PI * 299792458.0 * 100) * 1e15;
 
+// class RunningStat
+//     {
+//     public:
+//         RunningStat() : m_n(0) {}
+
+//         void Clear()
+//         {
+//             m_n = 0;
+//         }
+
+//         void Push(double x)
+//         {
+//             m_n++;
+
+//             // See Knuth TAOCP vol 2, 3rd edition, page 232
+//             if (m_n == 1)
+//             {
+//                 m_oldM = m_newM = x;
+//                 m_oldS = 0.0;
+//             }
+//             else
+//             {
+//                 m_newM = m_oldM + (x - m_oldM)/m_n;
+//                 m_newS = m_oldS + (x - m_oldM)*(x - m_newM);
+    
+//                 // set up for next iteration
+//                 m_oldM = m_newM; 
+//                 m_oldS = m_newS;
+//             }
+//         }
+
+//         int NumDataValues() const
+//         {
+//             return m_n;
+//         }
+
+//         double Mean() const
+//         {
+//             return (m_n > 0) ? m_newM : 0.0;
+//         }
+
+//         double Variance() const
+//         {
+//             return ( (m_n > 1) ? m_newS/(m_n - 1) : 0.0 );
+//         }
+
+//         double StandardDeviation() const
+//         {
+//             return sqrt( Variance() );
+//         }
+
+//     private:
+//         int m_n;
+//         double m_oldM, m_newM, m_oldS, m_newS;
+//     };
+
 void updateTrajectory(VectorXd &Hf, RandomGenerator &rnd, Params const &p)
 {
     Hf *= std::exp(-p.lam * p.dt);
@@ -38,7 +94,7 @@ ArrayXd evolve(RandomGenerator rnd, MatrixXd const &H0, VectorXcd const &c0,
 {
     MatrixXd H = H0;
     VectorXcd c = c0;
-    VectorXd Hf = VectorXd::Zero(p.N);
+    VectorXd Hf = VectorXd::Zero(p.N, p.N);
     for (int i = 0; i < p.N; ++i) // Prepare the starting disorder
         Hf[i] = rnd.RandomGaussian(0, p.sig);
     H.diagonal() = Hf;
@@ -73,55 +129,49 @@ int main(int argc, char *argv[])
     H0.diagonal(1) = VectorXd::Constant(p.N - 1, p.J);
     H0.diagonal(-1) = VectorXd::Constant(p.N - 1, p.J);
 
-    VectorXcd c0 = VectorXcd::Zero(p.N);
-    c0[p.N / 2] = 1; // single excitation in the middle of the chain
-
-    double x0 = ((p.N + 1) / 2); // middle of the chain in units of R
-    
-    // Diagonals of the matrix form of the operator (x - x0)^2 in units of R^2
-    RowVectorXd xxsq = 
-        ArrayXd::LinSpaced(p.N, 1, p.N).square() - 
-        ArrayXd::LinSpaced(p.N, 1, p.N) * 2 * x0 + (x0 * x0);
-       
-    ThreadPool pool(std::thread::hardware_concurrency());
-    
-    std::vector<std::future<ArrayXd>> results;
-    results.reserve(p.nRuns);
-
     auto s = seedsFromClock(); // base seeds for random numbers
     int seed1 = s.first;
     int seed2 = s.second;
+    RandomGenerator rnd(seed1, seed2);
 
-    for (int run = 0; run < p.nRuns; ++run)
+    // if (not cmdargs.quiet)
+    //     print_progress(std::cout, 0, p.nRuns, "", "", 1, 20);
+
+    MatrixXd H = H0;
+    VectorXd Hf = VectorXd::Zero(p.N, p.N);
+    for (int i = 0; i < p.N; ++i) // Prepare the starting disorder
+        Hf[i] = rnd.RandomGaussian(0, p.sig);
+    H.diagonal() = Hf;
+
+    std::vector<double> eigStd;
+    std::vector<double> eigMean;
+    eigStd.reserve(p.N);
+    eigMean.reserve(p.N);
+
+    Eigen::SelfAdjointEigenSolver<MatrixXd> solver(p.N);
+
+    std::vector<double> eigt(p.N * p.nTimeSteps);
+
+    for (int ti = 0; ti < p.nTimeSteps; ++ti)
     {
-        RandomGenerator rnd(seed1, seed2); // every thread gets its own seed
-        results.push_back(
-            pool.enqueue_task(evolve, rnd, H0, c0, xxsq, p));
-        seed2 = (seed2 + 1) % 30081;
+        solver.computeFromTridiagonal(H.diagonal(), H.diagonal(-1) );
+        VectorXd const& w = solver.eigenvalues();
+
+        for (int ni = 0; ni < p.N; ++ni) 
+            eigt[ni * p.nTimeSteps + ti] = w[ni];
+
+        updateTrajectory(Hf, rnd, p);
+        H.diagonal() = Hf;
     }
-
-    // <<(x(t) - x0)^2>> in units of R^2
-    ArrayXd msd = ArrayXd::Zero(p.nTimeSteps);
-
-    if (not cmdargs.quiet)
-        print_progress(std::cout, 0, p.nRuns, "", "", 1, 20);
-
-    for (int run = 0; run < p.nRuns; ++run)
-    {
-        msd += results[run].get();
-        if (not cmdargs.quiet)
-            print_progress(std::cout, run + 1, p.nRuns, "", "", 1, 20);
-    }
-    msd /= p.nRuns;
 
     if (not cmdargs.outFile)
         return 0;
 
     if (cmdargs.outFName.empty() )
-        cmdargs.outFName = nowStrLocal("%Y%m%d%H%M%S.msd");
+        cmdargs.outFName = nowStrLocal("%Y%m%d%H%M%S.eigt");
     
     if (cmdargs.outFName != "out.tmp")
         std::cout << cmdargs.outFName << '\n';
 
-    saveData(cmdargs.outFName, msd.data(), msd.size(), p);
+    saveData(cmdargs.outFName, eigt.data(), eigt.size(), p);
 }

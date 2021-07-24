@@ -113,7 +113,7 @@ public:
 		auto work = [p = std::forward<F>(f), t = std::make_tuple(std::forward<Args>(args)...)]() { std::apply(p, t); };
 		auto i = m_index++;
 
-		for(auto n = 0; n < m_count * K; ++n)
+		for(size_t n = 0; n < m_count * K; ++n)
 			if(m_queues[(i + n) % m_count].try_push(work))
 				return;
 

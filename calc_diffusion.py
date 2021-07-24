@@ -7,6 +7,8 @@ import msgpack
 import sys
 import os
 
+plt.style.use('science')
+
 # hbar / (hc * 100 cm/m) * 1e15 fs/s [cm^-1 fs]
 hbar_cm1_fs = 1 / (2 * np.pi * 299792458 * 100) * 1e15
 
@@ -39,6 +41,11 @@ if len(sys.argv) > 1:
 else:
     fname = input("Enter a file to read: ")
 
+if len(sys.argv) > 2:
+    cutoff = float(sys.argv[2])
+else:
+    cutoff = 99999
+
 with open(fname, "rb") as f:
     binData = f.read()
 
@@ -53,6 +60,14 @@ sig = dataset['sig']                 # Stddev of energy fluctuations [cm^-1]
 lam = dataset['lam']                 # Interaction rate 1/T [fs^-1]
 dt = dataset['dt']                   # Time step [fs]
 nTimeSteps = dataset['nTimeSteps']   # Final time = nTimeSteps * dt
+
+print("N = {}".format(N))
+print("J = {} cm^-1".format(J))
+print("lam = {} fs^-1".format(lam))
+print("sig = {} cm^-1".format(sig))
+print("nRuns = {}".format(dataset['nRuns']))
+print("nTimeSteps = {}".format(nTimeSteps))
+print("dt = {} fs\n".format(dt))
 
 # <<(x(t) - x0)^2>> in units of R^2
 if 'msd' in dataset:
@@ -69,16 +84,18 @@ def msdf(t, a, b):
     """
     return b * a * (t - a * (1 - np.exp(-t / a)))
 
+print("cutoff = {} fs".format(cutoff))
 Da = calcDiffAnalytic(N, J, sig, lam)
-popt, pcov = sp.optimize.curve_fit(msdf, t, msd, p0=(np.sqrt(Da), np.sqrt(Da)),
+popt, pcov = sp.optimize.curve_fit(msdf, t[t<=cutoff], msd[t<=cutoff], p0=(np.sqrt(Da), np.sqrt(Da)),
                                    maxfev=6000)
 a, b = popt
-print("from fit: D/R^2 =", a*b/2, "fs^-1")
-print("analytic: D/R^2 =", Da, "fs^-1")
-fig, axs = plt.subplots(1,2, sharex = True, sharey = True)
-
+print("D/R^2 =", a*b/2, "fs^-1")
+# print("analytic: D/R^2 =", Da, "fs^-1")
+fig, axs = plt.subplots(1,2, sharex = True, sharey = True, figsize=(12.75, 5.7))
+plt.subplots_adjust(top=0.88, bottom=0.11, left=0.11, right=0.9, hspace=0.2,
+                    wspace=0.245)
 fig.suptitle(r'$J = {:g}\ cm^{{-1}},\ \sigma = {:g}J,\ '
-             r'\Lambda = {:g}\ fs^{{-1}},\ N = {},\ dt = {}$'.format(J, sig/J, lam, N, dt))
+             r'\Lambda = {:g}\ fs^{{-1}},\ N = {},\ dt = {}\ fs$'.format(J, sig/J, lam, N, dt))
 ax1 = axs[0]
 ax1.plot(t, msd, 'r', label='NISE')
 ax1.grid()

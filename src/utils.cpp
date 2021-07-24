@@ -135,10 +135,16 @@ void print_progress(std::ostream &os, int iter, int total,
         bar.append("█");
     bar.append(barLength - filledLength, '-');
 
+    std::ios_base::fmtflags flags = os.flags(); // save old stream settings
+    std::streamsize ss = os.precision();
+
     os << "\33[2K\r" << prefix << "(" << iter << '/' << total << ") |" 
        << bar << "| "
        << std::fixed << std::setprecision(decimals)
        << percents << '%' << suffix;
+
+    os.flags(flags); // restore settings
+    os.precision(ss);
 
     if (iter == total)
         os << '\n';
