@@ -1,6 +1,13 @@
 #ifndef NISE_THREADING_THREADPOOL_H
 #define NISE_THREADING_THREADPOOL_H
 
+/*
+ * The code in this file was adapted from Vorbrodt's C++ Blog, written by
+ * Martin Vorbrodt. The code appears in his blog posts on 
+ * https://vorbrodt.blog/ and is archived on his Github:
+ * https://github.com/mvorbrodt/blog/ 
+ */
+
 #include <tuple>
 #include <atomic>
 #include <vector>
@@ -16,29 +23,30 @@
 class SimpleThreadPool
 {
 public:
-	explicit SimpleThreadPool(size_t threads = std::thread::hardware_concurrency())
+	explicit SimpleThreadPool(std::size_t thread_count = std::thread::hardware_concurrency())
 	{
-		if(!threads)
-			throw std::invalid_argument("Invalid thread count!");
+		if(!thread_count)
+			throw std::invalid_argument("bad thread count! must be non-zero!");
 
 		auto worker = [this]()
 		{
 			while(true)
 			{
-				Proc f;
+				proc_t f;
 				if(!m_queue.pop(f))
 					break;
 				f();
 			}
 		};
 
-		for(size_t i = 0; i < threads; ++i)
+		m_threads.reserve(thread_count);
+		while(thread_count--)
 			m_threads.emplace_back(worker);
 	}
 
 	~SimpleThreadPool()
 	{
-		m_queue.done();
+		m_queue.unblock();
 		for(auto& thread : m_threads)
 			thread.join();
 	}
@@ -58,34 +66,34 @@ public:
 		auto task = std::make_shared<task_type>(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
 		auto result = task->get_future();
 
-		m_queue.push([task]() { (*task)(); });
+		m_queue.push([=]() { (*task)(); });
 
 		return result;
 	}
 
 private:
-	using Proc = std::function<void(void)>;
-	using Queue = blocking_queue<Proc>;
-	Queue m_queue;
+	using proc_t = std::function<void(void)>;
+	using queue_t = unbounded_queue<proc_t>;
+	queue_t m_queue;
 
-	using Threads = std::vector<std::thread>;
-	Threads m_threads;
+	using threads_t = std::vector<std::thread>;
+	threads_t m_threads;
 };
 
 class ThreadPool
 {
 public:
-	explicit ThreadPool(size_t threads = std::thread::hardware_concurrency())
-	: m_queues(threads), m_count(threads)
+	explicit ThreadPool(std::size_t thread_count = std::thread::hardware_concurrency())
+	: m_queues(thread_count), m_count(thread_count)
 	{
-		if(!threads)
-			throw std::invalid_argument("Invalid thread count!");
+		if(!thread_count)
+			throw std::invalid_argument("bad thread count! must be non-zero!");
 
 		auto worker = [this](auto i)
 		{
 			while(true)
 			{
-				Proc f;
+				proc_t f;
 				for(size_t n = 0; n < m_count * K; ++n)
 					if(m_queues[(i + n) % m_count].try_pop(f))
 						break;
@@ -95,14 +103,15 @@ public:
 			}
 		};
 
-		for(size_t i = 0; i < threads; ++i)
+		m_threads.reserve(thread_count);
+		for(size_t i = 0; i < thread_count; ++i)
 			m_threads.emplace_back(worker, i);
 	}
 
 	~ThreadPool()
 	{
 		for(auto& queue : m_queues)
-			queue.done();
+			queue.unblock();
 		for(auto& thread : m_threads)
 			thread.join();
 	}
@@ -127,7 +136,7 @@ public:
 		using task_type = std::packaged_task<task_return_type()>;
 
 		auto task = std::make_shared<task_type>(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
-		auto work = [task]() { (*task)(); };
+		auto work = [=]() { (*task)(); };
 		auto result = task->get_future();
 		auto i = m_index++;
 
@@ -141,15 +150,15 @@ public:
 	}
 
 private:
-	using Proc = std::function<void(void)>;
-	using Queue = blocking_queue<Proc>;
-	using Queues = std::vector<Queue>;
-	Queues m_queues;
+	using proc_t = std::function<void(void)>;
+	using queue_t = unbounded_queue<proc_t>;
+	using queues_t = std::vector<queue_t>;
+	queues_t m_queues;
 
-	using Threads = std::vector<std::thread>;
-	Threads m_threads;
+	using threads_t = std::vector<std::thread>;
+	threads_t m_threads;
 
-	const size_t m_count;
+	const std::size_t m_count;
 	std::atomic_uint m_index = 0;
 
 	inline static const unsigned int K = 2;

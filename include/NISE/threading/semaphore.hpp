@@ -21,7 +21,7 @@ public:
 	void post()
 	{
 		{
-			std::unique_lock<std::mutex> lock(m_mutex);
+			std::unique_lock lock(m_mutex);
 			++m_count;
 		}
 		m_cv.notify_one();
@@ -30,7 +30,7 @@ public:
 	void post(unsigned int count)
 	{
 		{
-			std::unique_lock<std::mutex> lock(m_mutex);
+			std::unique_lock lock(m_mutex);
 			m_count += count;
 		}
 		m_cv.notify_all();
@@ -38,7 +38,7 @@ public:
 
 	void wait()
 	{
-		std::unique_lock<std::mutex> lock(m_mutex);
+		std::unique_lock lock(m_mutex);
 		m_cv.wait(lock, [this]() { return m_count != 0; });
 		--m_count;
 	}
@@ -46,7 +46,7 @@ public:
 	template<typename Rep, typename Period>
 	bool wait_for(const std::chrono::duration<Rep, Period>& t)
 	{
-		std::unique_lock<std::mutex> lock(m_mutex);
+		std::unique_lock lock(m_mutex);
 		if(!m_cv.wait_for(lock, t, [this]() { return m_count != 0; }))
 			return false;
 		--m_count;
@@ -56,7 +56,7 @@ public:
 	template<typename Clock, typename Duration>
 	bool wait_until(const std::chrono::time_point<Clock, Duration>& t)
 	{
-		std::unique_lock<std::mutex> lock(m_mutex);
+		std::unique_lock lock(m_mutex);
 		if(!m_cv.wait_until(lock, t, [this]() { return m_count != 0; }))
 			return false;
 		--m_count;
@@ -72,7 +72,7 @@ private:
 class fast_semaphore
 {
 public:
-	explicit fast_semaphore(unsigned int count = 0)
+	explicit fast_semaphore(int count = 0)
 	: m_count(count), m_semaphore(0) {}
 
 	void post()
