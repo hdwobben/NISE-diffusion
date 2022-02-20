@@ -1,21 +1,21 @@
-#include <iostream>
-#include <complex>
-#include <cmath>
-#include <cstdlib>
-#include <cstring>
 #include <Eigen/Dense>
 #include <NISE/random.hpp>
-#include <NISE/utils.hpp>
 #include <NISE/threading/threadpool.hpp>
+#include <NISE/utils.hpp>
+#include <cmath>
+#include <complex>
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
 
-using Eigen::MatrixXd;
+using Eigen::ArrayXd;
 using Eigen::MatrixXcd;
+using Eigen::MatrixXd;
+using Eigen::RowVectorXcd;
+using Eigen::RowVectorXd;
 using Eigen::VectorXcd;
 using Eigen::VectorXd;
-using Eigen::RowVectorXd;
-using Eigen::RowVectorXcd;
-using Eigen::ArrayXd;
-using DiagonalMatrixXcd = 
+using DiagonalMatrixXcd =
     Eigen::DiagonalMatrix<Eigen::dcomplex, Eigen::Dynamic>;
 
 using namespace std::complex_literals;
@@ -47,14 +47,12 @@ ArrayXd evolve(RandomGenerator rnd, MatrixXd const &H0, Params const &p)
     Eigen::Map<ArrayXd> mean(meanM2.data(), p.N);
 
     // sum of squared distance from the mean
-    Eigen::Map<ArrayXd> m2(meanM2.data() + p.N, p.N);  
+    Eigen::Map<ArrayXd> m2(meanM2.data() + p.N, p.N);
 
-    for (int ti = 0; ti < p.nTimeSteps; ++ti)
-    {
-        solver.computeFromTridiagonal(H.diagonal(), H.diagonal(-1) );
-        VectorXd const& w = solver.eigenvalues();
-        for (int ni = 0; ni < p.N; ++ni)
-        {
+    for (int ti = 0; ti < p.nTimeSteps; ++ti) {
+        solver.computeFromTridiagonal(H.diagonal(), H.diagonal(-1));
+        VectorXd const &w = solver.eigenvalues();
+        for (int ni = 0; ni < p.N; ++ni) {
             // Welford's algorithm for mean and variance
             double d1 = w[ni] - mean[ni];
             mean[ni] += d1 / (ti + 1);
@@ -71,7 +69,7 @@ ArrayXd evolve(RandomGenerator rnd, MatrixXd const &H0, Params const &p)
 void process(std::string const &fname)
 {
     Params p = loadParams(fname);
-    //p.nRuns = 100;
+    // p.nRuns = 100;
     std::cout << p << '\n';
 
     // Constant part of the Hamiltonian (site basis) in cm^-1
@@ -87,12 +85,10 @@ void process(std::string const &fname)
     int seed2 = s.second;
 
     ThreadPool pool(std::thread::hardware_concurrency());
-    
-    for (int run = 0; run < p.nRuns; ++run)
-    {
+
+    for (int run = 0; run < p.nRuns; ++run) {
         RandomGenerator rnd(seed1, seed2); // every thread gets its own seed
-        results.push_back(
-            pool.enqueue_task(evolve, rnd, H0, p));
+        results.push_back(pool.enqueue_task(evolve, rnd, H0, p));
         seed2 = (seed2 + 1) % 30081;
     }
 
@@ -103,22 +99,20 @@ void process(std::string const &fname)
 
     int count = 0;
     print_progress(std::cout, 0, p.nRuns, "", "", 1, 20);
-    for (int run = 0; run < p.nRuns; ++run)
-    {
+    for (int run = 0; run < p.nRuns; ++run) {
         ArrayXd imv = results[run].get();
         Eigen::Map<ArrayXd> imean(imv.data(), p.N);
         Eigen::Map<ArrayXd> im2(imv.data() + p.N, p.N);
 
         int newCount = count + p.nTimeSteps;
-        
+
         for (int ni = 0; ni < p.N; ++ni) // Chan et al. parallel algorithm
         {
             double delta = imean[ni] - mean[ni];
-            if (static_cast<double>(count) / p.nTimeSteps > 0.5 and 
-                p.nTimeSteps > 500000)
-            {
-                mean[ni] = (count * mean[ni] + p.nTimeSteps * imean[ni]) / 
-                            newCount;
+            if (static_cast<double>(count) / p.nTimeSteps > 0.5 and
+                p.nTimeSteps > 500000) {
+                mean[ni] =
+                    (count * mean[ni] + p.nTimeSteps * imean[ni]) / newCount;
             }
             else
                 mean[ni] += delta * p.nTimeSteps / newCount;
@@ -140,25 +134,24 @@ void process(std::string const &fname)
 
     std::cout << "Gamma / J = " << p.sig * p.sig / (hbar_cm1_fs * p.lam * p.J)
               << '\n'
-              << "Gamma_eff / J = " << avgVar / (hbar_cm1_fs * p.lam * p.J) 
+              << "Gamma_eff / J = " << avgVar / (hbar_cm1_fs * p.lam * p.J)
               << '\n';
-    
-    //std::string outFname = fname.substr(0, fname.find_last_of('.')) + ".mv";
 
-    //saveData(outFname, meanVar.data(), meanVar.size(), p);
+    // std::string outFname = fname.substr(0, fname.find_last_of('.')) + ".mv";
+
+    // saveData(outFname, meanVar.data(), meanVar.size(), p);
 }
 
 #include <filesystem>
 namespace fs = std::filesystem;
- 
+
 int main(int argc, char *argv[])
 {
-    for(auto& entry: fs::directory_iterator(fs::current_path() ) )
-    {
-        if (not entry.is_regular_file() or entry.path().extension() != ".json" )
+    for (auto &entry: fs::directory_iterator(fs::current_path())) {
+        if (not entry.is_regular_file() or entry.path().extension() != ".json")
             continue;
 
-        process(entry.path().c_str() );
+        process(entry.path().c_str());
         std::cout << entry.path() << '\n';
     }
 }

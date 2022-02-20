@@ -1,21 +1,21 @@
-#include <iostream>
-#include <complex>
-#include <cmath>
-#include <cstdlib>
-#include <cstring>
 #include <Eigen/Dense>
 #include <NISE/random.hpp>
-#include <NISE/utils.hpp>
 #include <NISE/threading/threadpool.hpp>
+#include <NISE/utils.hpp>
+#include <cmath>
+#include <complex>
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
 
-using Eigen::MatrixXd;
+using Eigen::ArrayXd;
 using Eigen::MatrixXcd;
+using Eigen::MatrixXd;
+using Eigen::RowVectorXcd;
+using Eigen::RowVectorXd;
 using Eigen::VectorXcd;
 using Eigen::VectorXd;
-using Eigen::RowVectorXd;
-using Eigen::RowVectorXcd;
-using Eigen::ArrayXd;
-using DiagonalMatrixXcd = 
+using DiagonalMatrixXcd =
     Eigen::DiagonalMatrix<Eigen::dcomplex, Eigen::Dynamic>;
 
 using namespace std::complex_literals;
@@ -45,12 +45,11 @@ ArrayXd evolve(RandomGenerator rnd, MatrixXd const &H0, Params const &p)
 
     ArrayXd eigt{p.N * p.nTimeSteps};
 
-    for (int ti = 0; ti < p.nTimeSteps; ++ti)
-    {
-        solver.computeFromTridiagonal(H.diagonal(), H.diagonal(-1) );
-        VectorXd const& w = solver.eigenvalues();
+    for (int ti = 0; ti < p.nTimeSteps; ++ti) {
+        solver.computeFromTridiagonal(H.diagonal(), H.diagonal(-1));
+        VectorXd const &w = solver.eigenvalues();
 
-        for (int ni = 0; ni < p.N; ++ni) 
+        for (int ni = 0; ni < p.N; ++ni)
             eigt[ni * p.nTimeSteps + ti] = w[ni];
 
         updateTrajectory(Hf, rnd, p);
@@ -79,12 +78,10 @@ int main(int argc, char *argv[])
     int seed2 = s.second;
 
     ThreadPool pool(std::thread::hardware_concurrency());
-    
-    for (int run = 0; run < p.nRuns; ++run)
-    {
+
+    for (int run = 0; run < p.nRuns; ++run) {
         RandomGenerator rnd(seed1, seed2); // every thread gets its own seed
-        results.push_back(
-            pool.enqueue_task(evolve, rnd, H0, p));
+        results.push_back(pool.enqueue_task(evolve, rnd, H0, p));
         seed2 = (seed2 + 1) % 30081;
     }
 
@@ -94,8 +91,7 @@ int main(int argc, char *argv[])
     if (not cmdargs.quiet)
         print_progress(std::cout, 0, p.nRuns, "", "", 1, 20);
 
-    for (int run = 0; run < p.nRuns; ++run)
-    {
+    for (int run = 0; run < p.nRuns; ++run) {
         eigt += results[run].get();
         if (not cmdargs.quiet)
             print_progress(std::cout, run + 1, p.nRuns, "", "", 1, 20);
@@ -107,9 +103,9 @@ int main(int argc, char *argv[])
     if (not cmdargs.outFile)
         return 0;
 
-    if (cmdargs.outFName.empty() )
+    if (cmdargs.outFName.empty())
         cmdargs.outFName = nowStrLocal("%Y%m%d%H%M%S.eigt");
-    
+
     if (cmdargs.outFName != "out.tmp")
         std::cout << cmdargs.outFName << '\n';
 

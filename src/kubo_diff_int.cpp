@@ -1,22 +1,22 @@
-#include <iostream>
-#include <complex>
-#include <cmath>
-#include <cstdlib>
-#include <cstring>
 #include <Eigen/Dense>
 #include <NISE/random.hpp>
-#include <NISE/utils.hpp>
 #include <NISE/threading/threadpool.hpp>
- 
-using Eigen::MatrixXd;
+#include <NISE/utils.hpp>
+#include <cmath>
+#include <complex>
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
+
+using Eigen::ArrayXcd;
+using Eigen::ArrayXd;
 using Eigen::MatrixXcd;
+using Eigen::MatrixXd;
+using Eigen::RowVectorXcd;
+using Eigen::RowVectorXd;
 using Eigen::VectorXcd;
 using Eigen::VectorXd;
-using Eigen::RowVectorXd;
-using Eigen::RowVectorXcd;
-using Eigen::ArrayXd;
-using Eigen::ArrayXcd;
-using DiagonalMatrixXcd = 
+using DiagonalMatrixXcd =
     Eigen::DiagonalMatrix<Eigen::dcomplex, Eigen::Dynamic>;
 
 using namespace std::complex_literals;
@@ -41,17 +41,16 @@ ArrayXcd evolve(RandomGenerator rnd, MatrixXd const &H0, MatrixXcd const &j0,
     MatrixXcd jt = j0;
     VectorXd Hf = VectorXd::Zero(p.N);
     for (int i = 0; i < p.N; ++i) // Prepare the starting disorder
-        Hf[i] = rnd.RandomGaussian(0, p.sig); 
+        Hf[i] = rnd.RandomGaussian(0, p.sig);
     H.diagonal() = Hf;
 
     ArrayXcd integrand{p.nTimeSteps}; // Tr(j(u,t)j(u)) in units of R^2 [fs^-2]
     Eigen::SelfAdjointEigenSolver<MatrixXd> solver(p.N);
 
-    for (int ti = 0; ti < p.nTimeSteps; ++ti)
-    {
+    for (int ti = 0; ti < p.nTimeSteps; ++ti) {
         integrand[ti] = (jt * j0).trace(); // jt.cwiseProduct(j0).sum();
-        solver.computeFromTridiagonal(H.diagonal(), H.diagonal(-1) );
-        VectorXcd L = 
+        solver.computeFromTridiagonal(H.diagonal(), H.diagonal(-1));
+        VectorXcd L =
             (solver.eigenvalues().array() * -1i * p.dt / hbar_cm1_fs).exp();
         MatrixXd const &V = solver.eigenvectors();
         MatrixXcd U = V * L.asDiagonal() * V.adjoint();
@@ -78,17 +77,17 @@ int main(int argc, char *argv[])
     MatrixXcd j0 = MatrixXcd::Zero(p.N, p.N);
     j0.diagonal(1) = VectorXcd::Constant(p.N - 1, 1i * p.J / hbar_cm1_fs);
     j0.diagonal(-1) = VectorXcd::Constant(p.N - 1, -1i * p.J / hbar_cm1_fs);
-         
+
     unsigned long nThreads;
     char *penv;
 
-    if ((penv = std::getenv("SLURM_JOB_CPUS_ON_NODE") ) )
+    if ((penv = std::getenv("SLURM_JOB_CPUS_ON_NODE")))
         nThreads = std::stoul(penv);
     else
         nThreads = std::thread::hardware_concurrency();
 
     ThreadPool pool(nThreads);
-    
+
     std::vector<std::future<ArrayXcd>> results;
     results.reserve(p.nRuns);
 
@@ -96,11 +95,9 @@ int main(int argc, char *argv[])
     int seed1 = s.first;
     int seed2 = s.second;
 
-    for (int run = 0; run < p.nRuns; ++run)
-    {
+    for (int run = 0; run < p.nRuns; ++run) {
         RandomGenerator rnd(seed1, seed2); // every thread gets its own seed
-        results.push_back(
-            pool.enqueue_task(evolve, rnd, H0, j0, p));
+        results.push_back(pool.enqueue_task(evolve, rnd, H0, j0, p));
         seed2 = (seed2 + 1) % 30081;
     }
 
@@ -110,8 +107,7 @@ int main(int argc, char *argv[])
     if (not cmdargs.quiet)
         print_progress(std::cout, 0, p.nRuns, "", "", 1, 20);
 
-    for (int run = 0; run < p.nRuns; ++run)
-    {
+    for (int run = 0; run < p.nRuns; ++run) {
         integrand += results[run].get();
         if (not cmdargs.quiet)
             print_progress(std::cout, run + 1, p.nRuns, "", "", 1, 20);
@@ -121,11 +117,11 @@ int main(int argc, char *argv[])
     if (not cmdargs.outFile)
         return 0;
 
-    if (cmdargs.outFName.empty() )
+    if (cmdargs.outFName.empty())
         cmdargs.outFName = nowStrLocal("%Y%m%d%H%M%S.kuboint");
-    
+
     if (cmdargs.outFName != "out.tmp")
         std::cout << cmdargs.outFName << '\n';
 
-    saveData(cmdargs.outFName, integrand.data(), integrand.size(), p);    
+    saveData(cmdargs.outFName, integrand.data(), integrand.size(), p);
 }

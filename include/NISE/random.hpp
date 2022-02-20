@@ -3,7 +3,7 @@
 
 #include <utility>
 
-// Using the system clock, return two numbers with ranges 
+// Using the system clock, return two numbers with ranges
 // 0 <= num1 <= 31328,
 // 0 <= num2 <= 30081
 std::pair<int, int> seedsFromClock();
@@ -32,9 +32,8 @@ std::pair<int, int> seedsFromClock();
 // 	    6533892.0  14220222.0  7275067.0
 // 	    6172232.0  8354498.0   10633180.0
 
-class RandomGenerator
-{
-public:
+class RandomGenerator {
+  public:
     // This is the initialization routine for the random number generator.
     // NOTE: The seed variables can have values between:  0 <= IJ <= 31328
     //                                                    0 <= KL <= 30081
@@ -44,7 +43,7 @@ public:
     // each group could be assigned its own IJ seed. This would leave each group
     // with 30000 choices for the second seed. That is to say, this random
     // number generator can create 900 million different subsequences -- with
-    // each subsequence having a length of approximately 10^30. 
+    // each subsequence having a length of approximately 10^30.
 
     // This Random Number Generator is based on the algorithm in a FORTRAN
     // version published by George Marsaglia and Arif Zaman, Florida State
@@ -60,19 +59,15 @@ public:
 
     // Calls RandomGenerator(p.first, p.second)
     RandomGenerator(std::pair<int, int> const &p)
-    :
-        RandomGenerator(p.first, p.second)
+        : RandomGenerator(p.first, p.second)
     {}
 
     // Generates two seeds from the clock time and then uses above constructor
-    RandomGenerator()
-    :
-        RandomGenerator(seedsFromClock() )
-    {}
-     
+    RandomGenerator() : RandomGenerator(seedsFromClock()) {}
+
     // This is the random number generator proposed by George Marsaglia in
     // Florida State University Report: FSU-SCRI-87-50
-    double RandomUniform();    
+    double RandomUniform();
 
     // ALGORITHM 712, COLLECTED ALGORITHMS FROM ACM.
     // THIS WORK PUBLISHED IN TRANSACTIONS ON MATHEMATICAL SOFTWARE,
@@ -85,14 +80,13 @@ public:
     // and J.F. Monahan augmented with quadratic bounding curves.
     double RandomGaussian(double mean, double stddev);
 
-
     // Return random integer within a range, lower -> upper INCLUSIVE
-    int RandomInt(int lower,int upper);
+    int RandomInt(int lower, int upper);
 
     // Return random float within a range, lower -> upper
     double RandomDouble(double lower, double upper);
 
-private:
+  private:
     double _u[97], _c, _cd, _cm;
     int _i97, _j97;
 };

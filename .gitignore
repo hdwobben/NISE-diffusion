@@ -6,6 +6,7 @@
 !/src/
 !/CMakeLists.txt
 !/.gitignore
+!/.clang-format
 !/run_plot_nise.sh
 !/plot_msd.py
 !/run_diffuse.sh

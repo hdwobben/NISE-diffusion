@@ -1,21 +1,21 @@
-#include <iostream>
-#include <complex>
-#include <cmath>
-#include <cstdlib>
-#include <cstring>
 #include <Eigen/Dense>
 #include <NISE/random.hpp>
-#include <NISE/utils.hpp>
 #include <NISE/threading/threadpool.hpp>
+#include <NISE/utils.hpp>
+#include <cmath>
+#include <complex>
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
 
-using Eigen::MatrixXd;
+using Eigen::ArrayXd;
 using Eigen::MatrixXcd;
+using Eigen::MatrixXd;
+using Eigen::RowVectorXcd;
+using Eigen::RowVectorXd;
 using Eigen::VectorXcd;
 using Eigen::VectorXd;
-using Eigen::RowVectorXd;
-using Eigen::RowVectorXcd;
-using Eigen::ArrayXd;
-using DiagonalMatrixXcd = 
+using DiagonalMatrixXcd =
     Eigen::DiagonalMatrix<Eigen::dcomplex, Eigen::Dynamic>;
 
 using namespace std::complex_literals;
@@ -47,9 +47,9 @@ const double hbar_cm1_fs = 1 / (2 * M_PI * 299792458.0 * 100) * 1e15;
 //             {
 //                 m_newM = m_oldM + (x - m_oldM)/m_n;
 //                 m_newS = m_oldS + (x - m_oldM)*(x - m_newM);
-    
+
 //                 // set up for next iteration
-//                 m_oldM = m_newM; 
+//                 m_oldM = m_newM;
 //                 m_oldS = m_newS;
 //             }
 //         }
@@ -89,7 +89,7 @@ void updateTrajectory(VectorXd &Hf, RandomGenerator &rnd, Params const &p)
         Hf[i] += A * rnd.RandomGaussian(0, p.sig);
 }
 
-ArrayXd evolve(RandomGenerator rnd, MatrixXd const &H0, VectorXcd const &c0, 
+ArrayXd evolve(RandomGenerator rnd, MatrixXd const &H0, VectorXcd const &c0,
                RowVectorXd const &xxsq, Params const &p)
 {
     MatrixXd H = H0;
@@ -102,12 +102,11 @@ ArrayXd evolve(RandomGenerator rnd, MatrixXd const &H0, VectorXcd const &c0,
     ArrayXd msdi{p.nTimeSteps}; // <(x(t) - x0)^2> in units of R^2
     Eigen::SelfAdjointEigenSolver<MatrixXd> solver(p.N);
 
-    for (int ti = 0; ti < p.nTimeSteps; ++ti)
-    {
+    for (int ti = 0; ti < p.nTimeSteps; ++ti) {
         // < (x(t) - x(0))^2 > (expectation value)
         msdi[ti] = xxsq * c.cwiseAbs2();
-        solver.computeFromTridiagonal(H.diagonal(), H.diagonal(-1) );
-        VectorXcd L = 
+        solver.computeFromTridiagonal(H.diagonal(), H.diagonal(-1));
+        VectorXcd L =
             (solver.eigenvalues().array() * -1i * p.dt / hbar_cm1_fs).exp();
         MatrixXd const &V = solver.eigenvectors();
         c = V * L.asDiagonal() * V.adjoint() * c;
@@ -152,12 +151,11 @@ int main(int argc, char *argv[])
 
     std::vector<double> eigt(p.N * p.nTimeSteps);
 
-    for (int ti = 0; ti < p.nTimeSteps; ++ti)
-    {
-        solver.computeFromTridiagonal(H.diagonal(), H.diagonal(-1) );
-        VectorXd const& w = solver.eigenvalues();
+    for (int ti = 0; ti < p.nTimeSteps; ++ti) {
+        solver.computeFromTridiagonal(H.diagonal(), H.diagonal(-1));
+        VectorXd const &w = solver.eigenvalues();
 
-        for (int ni = 0; ni < p.N; ++ni) 
+        for (int ni = 0; ni < p.N; ++ni)
             eigt[ni * p.nTimeSteps + ti] = w[ni];
 
         updateTrajectory(Hf, rnd, p);
@@ -167,9 +165,9 @@ int main(int argc, char *argv[])
     if (not cmdargs.outFile)
         return 0;
 
-    if (cmdargs.outFName.empty() )
+    if (cmdargs.outFName.empty())
         cmdargs.outFName = nowStrLocal("%Y%m%d%H%M%S.eigt");
-    
+
     if (cmdargs.outFName != "out.tmp")
         std::cout << cmdargs.outFName << '\n';
 

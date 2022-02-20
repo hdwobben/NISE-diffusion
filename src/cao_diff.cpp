@@ -1,23 +1,23 @@
-#include <iostream>
-#include <iomanip>
-#include <complex>
-#include <cmath>
-#include <cstdlib>
-#include <cstring>
 #include <Eigen/Dense>
 #include <NISE/random.hpp>
-#include <NISE/utils.hpp>
 #include <NISE/threading/threadpool.hpp>
- 
-using Eigen::MatrixXd;
+#include <NISE/utils.hpp>
+#include <cmath>
+#include <complex>
+#include <cstdlib>
+#include <cstring>
+#include <iomanip>
+#include <iostream>
+
+using Eigen::ArrayXcd;
+using Eigen::ArrayXd;
 using Eigen::MatrixXcd;
+using Eigen::MatrixXd;
+using Eigen::RowVectorXcd;
+using Eigen::RowVectorXd;
 using Eigen::VectorXcd;
 using Eigen::VectorXd;
-using Eigen::RowVectorXd;
-using Eigen::RowVectorXcd;
-using Eigen::ArrayXd;
-using Eigen::ArrayXcd;
-using DiagonalMatrixXcd = 
+using DiagonalMatrixXcd =
     Eigen::DiagonalMatrix<Eigen::dcomplex, Eigen::Dynamic>;
 
 using namespace std::complex_literals;
@@ -42,7 +42,7 @@ double calcEffectiveSigma(Params p)
     H.diagonal(1) = VectorXd::Constant(p.N - 1, p.J);
     H.diagonal(-1) = VectorXd::Constant(p.N - 1, p.J);
 
-    //p.nTimeSteps = 100000;
+    // p.nTimeSteps = 100000;
     RandomGenerator rnd;
     VectorXd Hf = VectorXd::Zero(p.N, p.N);
     for (int i = 0; i < p.N; ++i) // Prepare the starting disorder
@@ -55,14 +55,12 @@ double calcEffectiveSigma(Params p)
     Eigen::Map<ArrayXd> mean(meanM2.data(), p.N);
 
     // sum of squared distance from the mean
-    Eigen::Map<ArrayXd> m2(meanM2.data() + p.N, p.N);  
+    Eigen::Map<ArrayXd> m2(meanM2.data() + p.N, p.N);
 
-    for (int ti = 0; ti < p.nTimeSteps; ++ti)
-    {
-        solver.computeFromTridiagonal(H.diagonal(), H.diagonal(-1) );
-        VectorXd const& w = solver.eigenvalues();
-        for (int ni = 0; ni < p.N; ++ni)
-        {
+    for (int ti = 0; ti < p.nTimeSteps; ++ti) {
+        solver.computeFromTridiagonal(H.diagonal(), H.diagonal(-1));
+        VectorXd const &w = solver.eigenvalues();
+        for (int ni = 0; ni < p.N; ++ni) {
             // Welford's algorithm for mean and variance
             double d1 = w[ni] - mean[ni];
             mean[ni] += d1 / (ti + 1);
@@ -74,7 +72,7 @@ double calcEffectiveSigma(Params p)
         H.diagonal() = Hf;
     }
     // m2 /= p.nTimeSteps - 1;
-    m2 = (m2 / (p.nTimeSteps - 1) ).sqrt();
+    m2 = (m2 / (p.nTimeSteps - 1)).sqrt();
 
     // double var = 0;
     // for (int ni = 1; ni < p.N - 1; ++ni)
@@ -82,8 +80,7 @@ double calcEffectiveSigma(Params p)
     ArrayXd::Index maxc, minc;
     mean.minCoeff(&minc);
     mean.maxCoeff(&maxc);
-    if (minc != 0 or maxc != p.N - 1)
-    {
+    if (minc != 0 or maxc != p.N - 1) {
         std::cerr << "Error!" << '\n';
         throw;
     }
@@ -91,10 +88,14 @@ double calcEffectiveSigma(Params p)
     double hw = std::sqrt(2 * std::log(2));
     double left = mean[1] - hw * m2[1];
     double right = mean[p.N - 2] + hw * m2[p.N - 2];
-    
-    //return std::sqrt(var);
-    std::cout << "Gamma_eff / J = " << std::pow((right - left) / (2 * hw), 2) / (hbar_cm1_fs * p.lam * p.J) << '\n';
-    std::cout << "Gamma / J = " << p.sig * p.sig / (hbar_cm1_fs * p.lam * p.J) << '\n';
+
+    // return std::sqrt(var);
+    std::cout << "Gamma_eff / J = "
+              << std::pow((right - left) / (2 * hw), 2) /
+                     (hbar_cm1_fs * p.lam * p.J)
+              << '\n';
+    std::cout << "Gamma / J = " << p.sig * p.sig / (hbar_cm1_fs * p.lam * p.J)
+              << '\n';
     return (right - left) / (2 * hw);
 }
 
@@ -111,8 +112,7 @@ double calcCao(Params const &p, bool periodic)
     js.diagonal(-1) = VectorXcd::Constant(p.N - 1, -1i * p.J / hbar_cm1_fs);
 
     Eigen::SelfAdjointEigenSolver<MatrixXd> solver(p.N);
-    if (periodic)
-    {
+    if (periodic) {
         H0(0, p.N - 1) = p.J;
         H0(p.N - 1, 0) = p.J;
         js(0, p.N - 1) = -1i * p.J;
@@ -120,7 +120,7 @@ double calcCao(Params const &p, bool periodic)
         solver.compute(H0);
     }
     else
-        solver.computeFromTridiagonal(H0.diagonal(), H0.diagonal(-1) );
+        solver.computeFromTridiagonal(H0.diagonal(), H0.diagonal(-1));
 
     MatrixXd const &v = solver.eigenvectors();
     VectorXd const &w = solver.eigenvalues();
@@ -134,18 +134,16 @@ double calcCao(Params const &p, bool periodic)
     // Diffusion constant in units of R^2 [fs^-1]
     double D = 0;
 
-    for (int mu = 0; mu < p.N; ++mu)
-    {
-        for (int nu = 0; nu < p.N; ++nu)
-        {
+    for (int mu = 0; mu < p.N; ++mu) {
+        for (int nu = 0; nu < p.N; ++nu) {
             double omega = w[mu] - w[nu];
-            D += hbar_cm1_fs * std::norm(je(mu, nu) ) *
-                    gamma / (std::pow(gamma, 2) + std::pow(omega, 2));
+            D += hbar_cm1_fs * std::norm(je(mu, nu)) * gamma /
+                 (std::pow(gamma, 2) + std::pow(omega, 2));
         }
     }
-    
+
     D /= p.N;
-    
+
     return D;
 }
 
@@ -155,48 +153,46 @@ double calcCaoIterative(Params p, bool periodic = false)
     double prevD = D - 1;
     p.N = 3000;
 
-    while (std::abs(D - prevD) / D > 1e-4)
-    {
+    while (std::abs(D - prevD) / D > 1e-4) {
         prevD = D;
         p.N += 500;
         D = calcCao(p, periodic);
-        std::cout << "D = " << D << ", N = " << p.N 
+        std::cout << "D = " << D << ", N = " << p.N
                   << ", diff = " << std::abs(D - prevD) << '\n';
     }
-    std::cout << "Converged analytic for N = " << p.N 
+    std::cout << "Converged analytic for N = " << p.N
               << "\nD = " << std::setprecision(12) << D << '\n';
     return D;
 }
 
 #include <filesystem>
 namespace fs = std::filesystem;
- 
+
 int main(int argc, char *argv[])
 {
     size_t nThreads;
     char *penv;
 
-    if ((penv = std::getenv("SLURM_JOB_CPUS_ON_NODE") ) )
+    if ((penv = std::getenv("SLURM_JOB_CPUS_ON_NODE")))
         nThreads = std::stoul(penv);
     else
         nThreads = std::thread::hardware_concurrency();
 
     ThreadPool pool(nThreads);
 
-    for(auto& entry: fs::directory_iterator(fs::current_path() ) )
-    {
-        if (not entry.is_regular_file() or entry.path().extension() != ".json" )
+    for (auto &entry: fs::directory_iterator(fs::current_path())) {
+        if (not entry.is_regular_file() or entry.path().extension() != ".json")
             continue;
 
         std::cout << entry.path() << '\n';
-        Params p = loadParams(entry.path().c_str() );
+        Params p = loadParams(entry.path().c_str());
         std::cout << p << '\n';
         std::string outFile = entry.path().stem().c_str() + std::string(".cao");
         p.sig = calcEffectiveSigma(p);
         p.N = 4900;
         pool.enqueue_work(
             [p, outFile]()
-            {        
+            {
                 double D = calcCao(p, false);
                 saveData(outFile, &D, 1, p);
             });
