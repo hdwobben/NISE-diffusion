@@ -81,8 +81,16 @@ int main(int argc, char *argv[])
     RowVectorXd xxsq = ArrayXd::LinSpaced(p.N, 1, p.N).square() -
                        ArrayXd::LinSpaced(p.N, 1, p.N) * 2 * x0 + (x0 * x0);
 
-    ThreadPool pool(std::thread::hardware_concurrency());
+    unsigned long nThreads;
+    char *penv;
+    
+    if ((penv = std::getenv("SLURM_JOB_CPUS_ON_NODE")))
+        nThreads = std::stoul(penv);
+    else
+        nThreads = std::thread::hardware_concurrency();
 
+    ThreadPool pool(nThreads);
+    
     std::vector<std::future<ArrayXd>> results;
     results.reserve(p.nRuns);
 
