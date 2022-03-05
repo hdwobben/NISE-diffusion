@@ -76,3 +76,21 @@ target_include_directories(kubo_diff_int PUBLIC
 target_link_libraries(kubo_diff_int PUBLIC Eigen3::Eigen Threads::Threads)
 _enable_warnings(kubo_diff_int)
 set_target_properties(kubo_diff_int PROPERTIES DEBUG_POSTFIX d)
+
+#-----------------------
+# cao_diff
+#-----------------------
+add_executable(cao_diff
+
+    src/cao_diff.cpp
+    src/random.cpp
+    src/utils.cpp)
+
+target_include_directories(cao_diff PUBLIC 
+
+    ${CMAKE_CURRENT_LIST_DIR}/include
+    ${json_SOURCE_DIR}/include)
+
+target_link_libraries(cao_diff PUBLIC Eigen3::Eigen Threads::Threads)
+_enable_warnings(cao_diff)
+set_target_properties(cao_diff PROPERTIES DEBUG_POSTFIX d)
