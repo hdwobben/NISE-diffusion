@@ -94,3 +94,19 @@ target_include_directories(cao_diff PUBLIC
 target_link_libraries(cao_diff PUBLIC Eigen3::Eigen Threads::Threads)
 _enable_warnings(cao_diff)
 set_target_properties(cao_diff PROPERTIES DEBUG_POSTFIX d)
+
+#-----------------------
+# cao_func
+#-----------------------
+add_executable(cao_func
+
+    src/cao_func.cpp)
+
+target_include_directories(cao_func PUBLIC 
+
+    ${CMAKE_CURRENT_LIST_DIR}/include
+    ${json_SOURCE_DIR}/include)
+
+target_link_libraries(cao_func PUBLIC Eigen3::Eigen Threads::Threads)
+_enable_warnings(cao_func)
+set_target_properties(cao_func PROPERTIES DEBUG_POSTFIX d)
