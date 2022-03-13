@@ -1,12 +1,11 @@
 #include <Eigen/Dense>
-#include <NISE/threading/threadpool.hpp>
-// #include <bits/getopt_ext.h>
 #include <cmath>
 #include <complex>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <getopt.h>
+#include <tuple>
 #include <iomanip>
 #include <iostream>
 #include <nlohmann/json.hpp>
@@ -110,6 +109,7 @@ void saveData(std::string const &fname, std::vector<uint8_t> data,
     dataset["min"] = cargs.min;
     dataset["max"] = cargs.max;
     dataset["num"] = cargs.num;
+    dataset["data"] = binData;
 
     std::vector<uint8_t> msg = json::to_msgpack(dataset);
 
@@ -130,9 +130,8 @@ void saveData(std::string const &fname, T *data, size_t size,
     saveData(fname, std::move(binData), cargs);
 }
 
-double calcCao(double gamma, double J = 300)
+std::pair<VectorXd, MatrixXcd> calcEigsJe(int N = 4000, double J = 300)
 {
-    const int N = 4000;
     // Constant part of the Hamiltonian (site basis) in cm^-1
     MatrixXd H0 = MatrixXd::Zero(N, N);
     H0.diagonal(1) = VectorXd::Constant(N - 1, J);
@@ -151,6 +150,15 @@ double calcCao(double gamma, double J = 300)
 
     // j(u) in eigenbasis in units of R [fs^-1]
     MatrixXcd je = v.adjoint() * js * v;
+    return {w, je};
+}
+
+double calcCao(double gamma, double J = 300)
+{
+    const int N = 4000;
+    auto eig = calcEigsJe(N, J);
+    VectorXd &w = eig.first;
+    MatrixXcd &je = eig.second;
 
     // Diffusion constant in units of R^2 [fs^-1]
     double D = 0;
@@ -164,51 +172,85 @@ double calcCao(double gamma, double J = 300)
     }
     D /= N;
 
+    // std::cout << "gamma = " << gamma << ", D = " << D << '\n';
+    return D;
+}
+
+double calcCaoPrecomputed(double gamma, VectorXd &w, MatrixXcd &je)
+{
+    if (w.rows() != je.rows() or je.rows() != je.cols() )
+        throw std::runtime_error("matrix dimensions must match!");
+
+    long N = w.rows();
+
+    // Diffusion constant in units of R^2 [fs^-1]
+    double D = 0;
+
+    for (int mu = 0; mu < N; ++mu) {
+        for (int nu = 0; nu < N; ++nu) {
+            double omega = w[mu] - w[nu];
+            D += hbar_cm1_fs * std::norm(je(mu, nu)) * gamma /
+                 (std::pow(gamma, 2) + std::pow(omega, 2));
+        }
+    }
+    D /= static_cast<double>(N);
+
+    // std::cout << "gamma = " << gamma << ", D = " << D << '\n';
     return D;
 }
 
 int main(int argc, char *argv[])
 {
     CmdArgs cmdargs = processCmdArguments(argc, argv);
-
-    size_t nThreads;
-    char *penv;
-
-    if ((penv = std::getenv("SLURM_JOB_CPUS_ON_NODE")))
-        nThreads = std::stoul(penv);
-    else
-        nThreads = std::thread::hardware_concurrency();
-
-    ThreadPool pool(nThreads);
-
-    std::vector<double> result(cmdargs.num);
     std::vector<double> input = linspace(cmdargs.min, cmdargs.max, cmdargs.num);
+    std::vector<double> result(cmdargs.num);
+    VectorXd w;
+    MatrixXcd je;
+    
+    std::tie(w, je) = calcEigsJe(4000, 150);
 
-    double *resultdata = result.data();
-    double *inputdata = input.data();
-    size_t pieceSize = cmdargs.num / nThreads;
-    size_t resid = cmdargs.num % nThreads;
-    if (resid) {
-        ++pieceSize;
+    for (size_t idx = 0; idx != cmdargs.num; ++idx) {
+        result[idx] = calcCaoPrecomputed(input[idx], w, je);
     }
-    else {
-        resid = nThreads;
-    }
+    // size_t nThreads;
+    // char *penv;
 
-    for (size_t tid = 0; tid != nThreads; ++tid) {
-        if (resid == 0)
-            --pieceSize;
+    // if ((penv = std::getenv("SLURM_JOB_CPUS_ON_NODE")))
+    //     nThreads = std::stoul(penv);
+    // else
+    //     nThreads = std::thread::hardware_concurrency();
 
-        pool.enqueue_work(
-            [inputdata, resultdata, pieceSize]()
-            {
-                for (size_t idx = 0; idx != pieceSize; ++idx) {
-                    resultdata[idx] = calcCao(inputdata[idx]);
-                }
-            });
-        inputdata += pieceSize;
-        resultdata += pieceSize;
-        --resid;
-    }
+    // ThreadPool pool(nThreads);
+
+    // std::vector<double> result(cmdargs.num);
+    // std::vector<double> input = linspace(cmdargs.min, cmdargs.max, cmdargs.num);
+
+    // double *resultdata = result.data();
+    // double *inputdata = input.data();
+    // size_t pieceSize = cmdargs.num / nThreads;
+    // size_t resid = cmdargs.num % nThreads;
+    // if (resid) {
+    //     ++pieceSize;
+    // }
+    // else {
+    //     resid = nThreads;
+    // }
+
+    // for (size_t tid = 0; tid != nThreads; ++tid) {
+    //     if (resid == 0)
+    //         --pieceSize;
+
+    //     std::cout << "Start thread " << tid + 1 << " with ps = " << pieceSize << '\n';
+    //     pool.enqueue_work(
+    //         [inputdata, resultdata, pieceSize]()
+    //         {
+    //             for (size_t idx = 0; idx != pieceSize; ++idx) {
+    //                 resultdata[idx] = calcCao(inputdata[idx]);
+    //             }
+    //         });
+    //     inputdata += pieceSize;
+    //     resultdata += pieceSize;
+    //     --resid;
+    // }
     saveData("out.cao", result.data(), result.size(), cmdargs);
 }
