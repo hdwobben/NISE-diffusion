@@ -100,7 +100,8 @@ set_target_properties(cao_diff PROPERTIES DEBUG_POSTFIX d)
 #-----------------------
 add_executable(cao_func
 
-    src/cao_func.cpp)
+    src/cao_func.cpp
+    src/random.cpp)
 
 target_include_directories(cao_func PUBLIC 
 

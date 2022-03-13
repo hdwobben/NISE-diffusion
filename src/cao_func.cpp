@@ -1,14 +1,16 @@
 #include <Eigen/Dense>
+#include <NISE/random.hpp>
+#include <NISE/threading/threadpool.hpp>
 #include <cmath>
 #include <complex>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <getopt.h>
-#include <tuple>
 #include <iomanip>
 #include <iostream>
 #include <nlohmann/json.hpp>
+#include <tuple>
 
 using json = nlohmann::json;
 
@@ -36,6 +38,39 @@ struct CmdArgs {
     bool quiet = false;
     bool outFile = true;
 };
+
+// Print a progress bar
+void print_progress(std::ostream &os, int iter, int total,
+                    std::string const &prefix, std::string const &suffix,
+                    int decimals, int barLength)
+{
+    static constexpr char barChar[] = "█";
+
+    double percents = 100 * (iter / static_cast<double>(total));
+    int filledLength = static_cast<int>(
+        std::round(barLength * iter / static_cast<double>(total)));
+
+    std::string bar;
+    bar.reserve(filledLength * (sizeof(barChar) - 1) + barLength);
+    for (int i = 0; i < filledLength; ++i)
+        bar.append("█");
+    bar.append(barLength - filledLength, '-');
+
+    std::ios_base::fmtflags flags = os.flags(); // save old stream settings
+    std::streamsize ss = os.precision();
+
+    os << "\33[2K\r" << prefix << "(" << iter << '/' << total << ") |" << bar
+       << "| " << std::fixed << std::setprecision(decimals) << percents << '%'
+       << suffix;
+
+    os.flags(flags); // restore settings
+    os.precision(ss);
+
+    if (iter == total)
+        os << '\n';
+
+    os << std::flush;
+}
 
 CmdArgs processCmdArguments(int argc, char *argv[])
 {
@@ -100,6 +135,18 @@ std::vector<double> linspace(double min, double max, size_t num,
     return ret;
 }
 
+std::vector<double> logspace(double min, double max, size_t num,
+                             bool endpoint = true)
+{
+    double emin = std::log(min);
+    double emax = std::log(max);
+    std::vector<double> ret = linspace(emin, emax, num, endpoint);
+    for (size_t idx = 0; idx != num; ++idx) {
+        ret[idx] = std::exp(ret[idx]);
+    }
+    return ret;
+}
+
 void saveData(std::string const &fname, std::vector<uint8_t> data,
               CmdArgs const &cargs)
 {
@@ -130,12 +177,17 @@ void saveData(std::string const &fname, T *data, size_t size,
     saveData(fname, std::move(binData), cargs);
 }
 
-std::pair<VectorXd, MatrixXcd> calcEigsJe(int N = 4000, double J = 300)
+std::pair<VectorXd, MatrixXcd> calcEigsJe(int N, double J, double sigma,
+                                          RandomGenerator rnd)
 {
     // Constant part of the Hamiltonian (site basis) in cm^-1
     MatrixXd H0 = MatrixXd::Zero(N, N);
     H0.diagonal(1) = VectorXd::Constant(N - 1, J);
     H0.diagonal(-1) = VectorXd::Constant(N - 1, J);
+
+    for (int i = 0; i < N; ++i) { // Prepare the starting disorder
+        H0(i, i) = rnd.RandomGaussian(0, sigma);
+    }
 
     // Flux operator j(u) (site basis) in units of R [fs^-1]
     MatrixXcd js = MatrixXcd::Zero(N, N);
@@ -153,32 +205,32 @@ std::pair<VectorXd, MatrixXcd> calcEigsJe(int N = 4000, double J = 300)
     return {w, je};
 }
 
-double calcCao(double gamma, double J = 300)
-{
-    const int N = 4000;
-    auto eig = calcEigsJe(N, J);
-    VectorXd &w = eig.first;
-    MatrixXcd &je = eig.second;
+// double calcCao(double gamma, double J = 300)
+// {
+//     const int N = 4000;
+//     auto eig = calcEigsJe(N, J);
+//     VectorXd &w = eig.first;
+//     MatrixXcd &je = eig.second;
 
-    // Diffusion constant in units of R^2 [fs^-1]
-    double D = 0;
+//     // Diffusion constant in units of R^2 [fs^-1]
+//     double D = 0;
 
-    for (int mu = 0; mu < N; ++mu) {
-        for (int nu = 0; nu < N; ++nu) {
-            double omega = w[mu] - w[nu];
-            D += hbar_cm1_fs * std::norm(je(mu, nu)) * gamma /
-                 (std::pow(gamma, 2) + std::pow(omega, 2));
-        }
-    }
-    D /= N;
+//     for (int mu = 0; mu < N; ++mu) {
+//         for (int nu = 0; nu < N; ++nu) {
+//             double omega = w[mu] - w[nu];
+//             D += hbar_cm1_fs * std::norm(je(mu, nu)) * gamma /
+//                  (std::pow(gamma, 2) + std::pow(omega, 2));
+//         }
+//     }
+//     D /= N;
 
-    // std::cout << "gamma = " << gamma << ", D = " << D << '\n';
-    return D;
-}
+//     // std::cout << "gamma = " << gamma << ", D = " << D << '\n';
+//     return D;
+// }
 
 double calcCaoPrecomputed(double gamma, VectorXd &w, MatrixXcd &je)
 {
-    if (w.rows() != je.rows() or je.rows() != je.cols() )
+    if (w.rows() != je.rows() or je.rows() != je.cols())
         throw std::runtime_error("matrix dimensions must match!");
 
     long N = w.rows();
@@ -199,19 +251,68 @@ double calcCaoPrecomputed(double gamma, VectorXd &w, MatrixXcd &je)
     return D;
 }
 
+ArrayXd calcCaoFuncRealisation(std::vector<double> const &gamma, double J,
+                               double sigma, int N, RandomGenerator rnd)
+{
+    VectorXd w;
+    MatrixXcd je;
+    ArrayXd result(gamma.size());
+
+    std::tie(w, je) = calcEigsJe(N, J, sigma, rnd);
+
+    for (size_t idx = 0, num = gamma.size(); idx != num; ++idx) {
+        result[static_cast<long>(idx)] =
+            calcCaoPrecomputed(gamma[idx] * J, w, je);
+    }
+    return result;
+}
+
 int main(int argc, char *argv[])
 {
     CmdArgs cmdargs = processCmdArguments(argc, argv);
-    std::vector<double> input = linspace(cmdargs.min, cmdargs.max, cmdargs.num);
-    std::vector<double> result(cmdargs.num);
-    VectorXd w;
-    MatrixXcd je;
-    
-    std::tie(w, je) = calcEigsJe(4000, 150);
+    std::vector<double> input = logspace(cmdargs.min, cmdargs.max, cmdargs.num);
+    std::vector<double> result(cmdargs.num, 0);
+    size_t realisations = 100;
+    int N = 1000;
+    double J = 300;
+    double sigma = J;
 
-    for (size_t idx = 0; idx != cmdargs.num; ++idx) {
-        result[idx] = calcCaoPrecomputed(input[idx], w, je);
+    unsigned long nThreads;
+    char *penv;
+
+    if ((penv = std::getenv("SLURM_JOB_CPUS_ON_NODE")))
+        nThreads = std::stoul(penv);
+    else
+        nThreads = std::thread::hardware_concurrency();
+
+    ThreadPool pool(nThreads);
+
+    auto s = seedsFromClock(); // base seeds for random numbers
+    int seed1 = s.first;
+    int seed2 = s.second;
+
+    // for (int run = 0; run < p.nRuns; ++run) {
+    //     RandomGenerator rnd(seed1, seed2); // every thread gets its own seed
+    //     results.push_back(pool.enqueue_task(evolve, rnd, H0, c0, xxsq, p));
+    //     seed2 = (seed2 + 1) % 30081;
+    // }
+
+    std::vector<std::future<ArrayXd>> results;
+    results.reserve(realisations);
+    ArrayXd D = ArrayXd::Zero(static_cast<long>(cmdargs.num));
+
+    for (size_t i = 0; i < realisations; ++i) {
+        RandomGenerator rnd(seed1, seed2);
+        results.push_back(
+            pool.enqueue_task(calcCaoFuncRealisation, input, J, sigma, N, rnd));
+        seed2 = (seed2 + 1) % 30081;
     }
+    print_progress(std::cout, 0, realisations, "", "", 1, 20);
+    for (int r = 0; r < realisations; ++r) {
+        D += results[r].get();
+        print_progress(std::cout, r + 1, realisations, "", "", 1, 20);
+    }
+    D /= static_cast<double>(realisations);
     // size_t nThreads;
     // char *penv;
 
@@ -223,7 +324,8 @@ int main(int argc, char *argv[])
     // ThreadPool pool(nThreads);
 
     // std::vector<double> result(cmdargs.num);
-    // std::vector<double> input = linspace(cmdargs.min, cmdargs.max, cmdargs.num);
+    // std::vector<double> input = linspace(cmdargs.min, cmdargs.max,
+    // cmdargs.num);
 
     // double *resultdata = result.data();
     // double *inputdata = input.data();
@@ -240,8 +342,8 @@ int main(int argc, char *argv[])
     //     if (resid == 0)
     //         --pieceSize;
 
-    //     std::cout << "Start thread " << tid + 1 << " with ps = " << pieceSize << '\n';
-    //     pool.enqueue_work(
+    //     std::cout << "Start thread " << tid + 1 << " with ps = " << pieceSize
+    //     << '\n'; pool.enqueue_work(
     //         [inputdata, resultdata, pieceSize]()
     //         {
     //             for (size_t idx = 0; idx != pieceSize; ++idx) {
@@ -252,5 +354,5 @@ int main(int argc, char *argv[])
     //     resultdata += pieceSize;
     //     --resid;
     // }
-    saveData("out.cao", result.data(), result.size(), cmdargs);
+    saveData("multithread.cao", D.data(), D.size(), cmdargs);
 }

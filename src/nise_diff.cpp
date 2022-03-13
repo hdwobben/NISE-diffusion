@@ -38,10 +38,13 @@ ArrayXd evolve(RandomGenerator rnd, MatrixXd const &H0, VectorXcd const &c0,
 {
     MatrixXd H = H0;
     VectorXcd c = c0;
-    VectorXd Hf = VectorXd::Zero(p.N);
-    for (int i = 0; i < p.N; ++i) // Prepare the starting disorder
+    VectorXd Hs(p.N), Hf(p.N); // Static and fluctuating disorder
+
+    for (int i = 0; i < p.N; ++i) { // Prepare the starting disorder
+        Hs[i] = rnd.RandomGaussian(0, p.J);
         Hf[i] = rnd.RandomGaussian(0, p.sig);
-    H.diagonal() = Hf;
+    }
+    H.diagonal() = Hs + Hf;
 
     ArrayXd msdi{p.nTimeSteps}; // <(x(t) - x0)^2> in units of R^2
     Eigen::SelfAdjointEigenSolver<MatrixXd> solver(p.N);
@@ -55,7 +58,7 @@ ArrayXd evolve(RandomGenerator rnd, MatrixXd const &H0, VectorXcd const &c0,
         MatrixXd const &V = solver.eigenvectors();
         c = V * L.asDiagonal() * V.adjoint() * c;
         updateTrajectory(Hf, rnd, p);
-        H.diagonal() = Hf;
+        H.diagonal() = Hs + Hf;
     }
     return msdi;
 }

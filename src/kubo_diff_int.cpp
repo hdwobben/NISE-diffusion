@@ -39,10 +39,13 @@ ArrayXcd evolve(RandomGenerator rnd, MatrixXd const &H0, MatrixXcd const &j0,
 {
     MatrixXd H = H0;
     MatrixXcd jt = j0;
-    VectorXd Hf = VectorXd::Zero(p.N);
-    for (int i = 0; i < p.N; ++i) // Prepare the starting disorder
+    VectorXd Hs(p.N), Hf(p.N); // Static and fluctuating disorder
+
+    for (int i = 0; i < p.N; ++i) { // Prepare the starting disorder
+        Hs[i] = rnd.RandomGaussian(0, p.J);
         Hf[i] = rnd.RandomGaussian(0, p.sig);
-    H.diagonal() = Hf;
+    }
+    H.diagonal() = Hs + Hf;
 
     ArrayXcd integrand{p.nTimeSteps}; // Tr(j(u,t)j(u)) in units of R^2 [fs^-2]
     Eigen::SelfAdjointEigenSolver<MatrixXd> solver(p.N);
@@ -56,7 +59,7 @@ ArrayXcd evolve(RandomGenerator rnd, MatrixXd const &H0, MatrixXcd const &j0,
         MatrixXcd U = V * L.asDiagonal() * V.adjoint();
         jt = U.adjoint() * jt * U;
         updateTrajectory(Hf, rnd, p);
-        H.diagonal() = Hf;
+        H.diagonal() = Hs + Hf;
     }
     return integrand;
 }
